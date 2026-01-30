@@ -1,0 +1,5 @@
+torch
+polars
+numpy
+requests
+ipykernel
