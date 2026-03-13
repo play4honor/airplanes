@@ -3,3 +3,7 @@ polars
 numpy
 requests
 ipykernel
+lightning
+torchtune
+black
+torchao

@@ -11,7 +11,7 @@ class Tokenizer:
         features = set(token.split("=")[0] for token in self.mapping.keys())
         for feature in features:
             self.mapping[f"{feature}=UNK"] = len(self.mapping)
-        self.mapping["<PAD>"] = len(self.mapping)
+        self.mapping["<MASK>"] = len(self.mapping)
 
     def to_index(self, token_sequence: list[str]):
 
@@ -22,6 +22,9 @@ class Tokenizer:
             ],
             dtype=torch.long,
         )
+
+    def __len__(self):
+        return len(self.mapping)
 
 
 class FlightsDataset(Dataset):
@@ -42,7 +45,7 @@ class FlightsDataset(Dataset):
         indices = torch.nn.functional.pad(
             indices,
             [0, self.max_length - indices.shape[0]],
-            value=self.tokenizer.mapping["<PAD>"],
+            value=self.tokenizer.mapping["<EOS>"],
         )
         return {
             "flight_date": row["FL_DATE"],
@@ -72,3 +75,4 @@ if __name__ == "__main__":
     )
 
     print(ds[500])
+    print(tokenizer.mapping)

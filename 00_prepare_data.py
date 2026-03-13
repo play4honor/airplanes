@@ -41,8 +41,9 @@ def prepare_flight_chain_data(
         )
         .with_columns(
             pl.concat_list(
-                pl.concat_str(pl.lit("ORIGIN="), pl.col("ORIGIN")),
-                pl.concat_str(pl.lit("DESTINATION="), pl.col("DEST")),
+                # Do we want an airport to have the same embedding as a departure and arrival?
+                pl.concat_str(pl.lit("AIRPORT="), pl.col("ORIGIN")),
+                pl.concat_str(pl.lit("AIRPORT="), pl.col("DEST")),
                 pl.concat_str(
                     pl.lit("DEP_TIME="),
                     ((pl.col("DEP_TIME") - pl.col("FL_DATE")).dt.total_minutes() / 10)
