@@ -7,3 +7,5 @@ lightning
 torchtune
 black
 torchao
+tensorboard
+torch-tb-profiler

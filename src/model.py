@@ -1,8 +1,9 @@
 import torch
 from lightning import pytorch as pl
 import torchtune
+from torchmetrics.text.perplexity import Perplexity
 
-from data import Tokenizer
+from .data import Tokenizer
 
 
 class FlightDiffusionModel(pl.LightningModule):
@@ -14,6 +15,7 @@ class FlightDiffusionModel(pl.LightningModule):
         depth: int,
         n_heads: int,
         max_seq_len: int,
+        lr: float,
     ):
         super().__init__()
         self.save_hyperparameters(logger=False)
@@ -28,6 +30,7 @@ class FlightDiffusionModel(pl.LightningModule):
         self.depth = depth
         self.n_heads = n_heads
         self.max_seq_len = max_seq_len
+        self.lr = lr
 
         self.embedding = torch.nn.Embedding(self.n_embeddings, self.d_model)
         self.position_encoding = torchtune.modules.RotaryPositionalEmbeddings(
@@ -70,10 +73,17 @@ class FlightDiffusionModel(pl.LightningModule):
             output=torch.nn.Linear(self.d_model, self.n_embeddings),
         )
 
+        self.train_metric = Perplexity(ignore_index=-100)
+        self.valid_metric = Perplexity(ignore_index=-100)
+
     def _mask_batch(self, x: torch.Tensor, t: float):
-        mask_positions = torch.rand_like(x) < t
+        mask_positions = torch.rand(x.shape, device=x.device) < t
         x[mask_positions] = self.mask_idx
         return x, mask_positions
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr)
+        return optimizer
 
     def loss(
         self,
@@ -86,7 +96,7 @@ class FlightDiffusionModel(pl.LightningModule):
         # targets: (n, s)
         # loss_mask: (n, s)
         unmasked_loss = torch.nn.functional.cross_entropy(
-            inputs, targets, reduction="none"
+            inputs.mT, targets, reduction="none"
         )
         return (unmasked_loss * loss_mask).sum() / t
 
@@ -95,7 +105,31 @@ class FlightDiffusionModel(pl.LightningModule):
         return x
 
     def step(self, stage, x: dict[str, torch.Tensor]) -> torch.Tensor:
-        pass
+        # 1) Choose t
+        # 2) Mask a copy of the input x using t, x_masked, and loss mask loss_mask
+        # 3) Mask x_masked through model, getting output y
+        # 4) Pass x, y, and loss_mask to self.loss
+        t = torch.rand([])
+        masked_x, loss_mask = self._mask_batch(x["event_sequence"].clone(), t)
+        y = self(masked_x)
+        loss = self.loss(y, x["event_sequence"], loss_mask, t)
+
+        self.log(f"{stage}_loss", loss)
+
+        # sorry
+        metric = getattr(self, f"{stage}_metric")
+        targets_with_ignore = x["event_sequence"].clone()
+        targets_with_ignore[~loss_mask] = -100
+        metric(y, targets_with_ignore)
+        self.log(f"{stage}_perplexity", metric)
+
+        return loss
+
+    def training_step(self, x: dict[str, torch.Tensor]) -> torch.Tensor:
+        return self.step("train", x)
+
+    def validation_step(self, x: dict[str, torch.Tensor]) -> torch.Tensor:
+        return self.step("valid", x)
 
 
 if __name__ == "__main__":
@@ -117,3 +151,5 @@ if __name__ == "__main__":
     y = model(x)
     print(y.shape)
     print(y)
+
+    loss = model.train_step({"event_sequence": x})

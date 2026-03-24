@@ -1,0 +1,21 @@
+data_params:
+  data_path: "./data/prepared_data.parquet"
+  max_length: 90
+  splits: [0.85, 0.1, 0.05]
+  
+model_params:
+  d_model: 256
+  depth: 4
+  n_heads: 8
+
+train_params:
+  max_epochs: 3
+  batch_size: 3072
+  accumulate_grad_batches: 1
+  learning_rate: 0.0001
+
+compute_params:
+  seed: 67
+  num_dl_workers: 4
+  precision: bf16-mixed
+  log_every_n_steps: 50

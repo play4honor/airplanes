@@ -48,8 +48,8 @@ class FlightsDataset(Dataset):
             value=self.tokenizer.mapping["<EOS>"],
         )
         return {
-            "flight_date": row["FL_DATE"],
-            "tail_number": row["tail_number"],
+            # "flight_date": [row["FL_DATE"]],
+            "tail_number": [row["tail_number"]],
             "event_sequence": indices,
         }
 
