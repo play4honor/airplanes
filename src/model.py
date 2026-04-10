@@ -52,7 +52,7 @@ class FlightDiffusionModel(pl.LightningModule):
                             k_proj=torch.nn.Linear(self.d_model, self.d_model),
                             v_proj=torch.nn.Linear(self.d_model, self.d_model),
                             output_proj=torch.nn.Linear(self.d_model, self.d_model),
-                            pos_embeddings=(self.position_encoding if i == 0 else None),
+                            pos_embeddings=self.position_encoding,
                             is_causal=False,
                         ),
                         mlp=torchtune.modules.FeedForward(
@@ -130,6 +130,14 @@ class FlightDiffusionModel(pl.LightningModule):
 
     def validation_step(self, x: dict[str, torch.Tensor]) -> torch.Tensor:
         return self.step("valid", x)
+
+    def predict_step(
+        self,
+        x: dict[str, torch.Tensor],
+        t0: float,
+        t1: float,
+    ) -> torch.Tensor:
+        pass
 
 
 if __name__ == "__main__":

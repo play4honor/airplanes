@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import Dataset
 import polars as pl
+import numpy as np
 
 
 class Tokenizer:
@@ -13,6 +14,8 @@ class Tokenizer:
             self.mapping[f"{feature}=UNK"] = len(self.mapping)
         self.mapping["<MASK>"] = len(self.mapping)
 
+        self.inverse_mapping = {v: k for k, v in self.mapping.items()}
+
     def to_index(self, token_sequence: list[str]):
 
         return torch.tensor(
@@ -22,6 +25,13 @@ class Tokenizer:
             ],
             dtype=torch.long,
         )
+
+    def from_index(self, idx: torch.Tensor):
+
+        if not hasattr(self, "inverse_mapping"):
+            self.inverse_mapping = {v: k for k, v in self.mapping.items()}
+
+        return np.vectorize(self.inverse_mapping.get)(idx.numpy(force=True))
 
     def __len__(self):
         return len(self.mapping)
