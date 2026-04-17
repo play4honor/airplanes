@@ -1,6 +1,6 @@
 data_params:
   data_path: "./data/prepared_data.parquet"
-  max_length: 90
+  max_length: 170
   splits: [0.85, 0.1, 0.05]
   
 model_params:
@@ -10,7 +10,7 @@ model_params:
 
 train_params:
   max_epochs: 3
-  batch_size: 3072
+  batch_size: 1024
   accumulate_grad_batches: 1
   learning_rate: 0.0001
 

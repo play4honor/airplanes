@@ -6,6 +6,7 @@ def prepare_flight_chain_data(
     supplemental_data: str,
     output_path: str,
 ):
+
     # Read data and correct dates.
     initial_data = pl.concat(
         [pl.read_csv(fd_path) for fd_path in flight_data]
@@ -20,6 +21,12 @@ def prepare_flight_chain_data(
         pl.col("DEP_TIME").str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S"),
         pl.col("FL_DATE").str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S"),
         pl.col("ARR_TIME").str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S"),
+        pl.col("O_TEMP").qcut(20, allow_duplicates=True),
+        pl.col("O_PRCP").qcut(20, allow_duplicates=True),
+        pl.col("O_WSPD").qcut(20, allow_duplicates=True),
+        pl.col("D_TEMP").qcut(20, allow_duplicates=True),
+        pl.col("D_PRCP").qcut(20, allow_duplicates=True),
+        pl.col("D_WSPD").qcut(20, allow_duplicates=True),
     )
 
     supplemental_data = (
@@ -44,6 +51,24 @@ def prepare_flight_chain_data(
                 # Do we want an airport to have the same embedding as a departure and arrival?
                 pl.concat_str(pl.lit("AIRPORT="), pl.col("ORIGIN")),
                 pl.concat_str(pl.lit("AIRPORT="), pl.col("DEST")),
+                pl.concat_str(pl.lit("DEP_TEMP="), pl.col("O_TEMP")).fill_null(
+                    "DEP_TEMP=UNK"
+                ),
+                pl.concat_str(pl.lit("DEP_PRCP="), pl.col("O_PRCP")).fill_null(
+                    "DEP_PRCP=UNK"
+                ),
+                pl.concat_str(pl.lit("DEP_WSPD="), pl.col("O_WSPD")).fill_null(
+                    "DEP_WSPD=UNK"
+                ),
+                pl.concat_str(pl.lit("ARR_TEMP="), pl.col("D_TEMP")).fill_null(
+                    "ARR_TEMP=UNK"
+                ),
+                pl.concat_str(pl.lit("ARR_PRCP="), pl.col("D_PRCP")).fill_null(
+                    "ARR_PRCP=UNK"
+                ),
+                pl.concat_str(pl.lit("ARR_WSPD="), pl.col("D_WSPD")).fill_null(
+                    "ARR_WSPD=UNK"
+                ),
                 pl.concat_str(
                     pl.lit("DEP_TIME="),
                     ((pl.col("DEP_TIME") - pl.col("FL_DATE")).dt.total_minutes() / 10)
