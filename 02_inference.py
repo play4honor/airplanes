@@ -20,7 +20,7 @@ STEP_SIZE = 2
 data = pol.read_parquet("./data/prepared_data.parquet")
 
 model = FlightDiffusionModel.load_from_checkpoint(
-    "./runs/lightning_logs/version_6/checkpoints/epoch=2-step=15165.ckpt",
+    "./runs/lightning_logs/version_7/checkpoints/epoch=2-step=15162.ckpt",
     weights_only=False,
 )
 model.eval()
@@ -55,8 +55,18 @@ if __name__ == "__main__":
         dtype=torch.int64,
         device=model.device,
     )
-    masked_inputs[0, 0] = model.tokenizer.mapping["<SOS>"]
-    masked_inputs[0, 1] = model.tokenizer.mapping["AIRPORT=LGA"]
+    input_tokens = [
+        "<SOS>",
+        "<DEPARTURE>",
+        "AIRPORT=STL",
+        # "AIRPORT=LGA",
+        # "AIRPORT=ORD",
+        # "DEP_TIME=35",
+        # "DEP_DELAY=6.0",
+    ]
+    masked_inputs[0, : len(input_tokens)] = torch.tensor(
+        [model.tokenizer.mapping[it] for it in input_tokens]
+    )
 
     # original_inputs = model.tokenizer.from_index(batch["event_sequence"])
     # masked_inputs, masked_positions = model._mask_batch(batch["event_sequence"], t=0.5)
@@ -92,4 +102,4 @@ if __name__ == "__main__":
         )
         n_masked -= actual_step_size
 
-        print(model.tokenizer.from_index(masked_inputs))
+    print(model.tokenizer.from_index(masked_inputs))

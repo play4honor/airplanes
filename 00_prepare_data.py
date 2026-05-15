@@ -4,29 +4,45 @@ import polars as pl
 def prepare_flight_chain_data(
     flight_data: list[str],
     supplemental_data: str,
+    timezone_data: str,
     output_path: str,
 ):
 
+    timezone_data = pl.read_csv(timezone_data)
+
     # Read data and correct dates.
-    initial_data = pl.concat(
-        [pl.read_csv(fd_path) for fd_path in flight_data]
-    ).with_columns(
-        pl.col("FL_DATE")
-        .str.strptime(pl.Date, "%Y-%m-%d %H:%M:%S")
-        .dt.strftime("%Y%m%d")
-        .alias("gross_flight_date"),
-        pl.col("CRS_DEP_TIME")
-        .str.strptime(pl.Time, "%Y-%m-%d %H:%M:%S")
-        .dt.strftime("%-H%M"),
-        pl.col("DEP_TIME").str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S"),
-        pl.col("FL_DATE").str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S"),
-        pl.col("ARR_TIME").str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S"),
-        pl.col("O_TEMP").qcut(20, allow_duplicates=True),
-        pl.col("O_PRCP").qcut(20, allow_duplicates=True),
-        pl.col("O_WSPD").qcut(20, allow_duplicates=True),
-        pl.col("D_TEMP").qcut(20, allow_duplicates=True),
-        pl.col("D_PRCP").qcut(20, allow_duplicates=True),
-        pl.col("D_WSPD").qcut(20, allow_duplicates=True),
+    initial_data = (
+        pl.concat([pl.read_csv(fd_path) for fd_path in flight_data])
+        .join(timezone_data, left_on="ORIGIN", right_on="airport")
+        .rename({"utc_offset": "dep_utc_offset"})
+        .join(timezone_data, left_on="DEST", right_on="airport")
+        .rename({"utc_offset": "arr_utc_offset"})
+        .with_columns(
+            pl.concat_str(pl.col("DEP_TIME"), pl.col("dep_utc_offset")).alias(
+                "DEP_TIME"
+            ),
+            pl.concat_str(pl.col("ARR_TIME"), pl.col("arr_utc_offset")).alias(
+                "ARR_TIME"
+            ),
+        )
+        .with_columns(
+            pl.col("FL_DATE")
+            .str.strptime(pl.Date, "%Y-%m-%d %H:%M:%S")
+            .dt.strftime("%Y%m%d")
+            .alias("gross_flight_date"),
+            pl.col("CRS_DEP_TIME")
+            .str.strptime(pl.Time, "%Y-%m-%d %H:%M:%S")
+            .dt.strftime("%-H%M"),
+            pl.col("DEP_TIME").str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S%:z"),
+            pl.col("FL_DATE").str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S"),
+            pl.col("ARR_TIME").str.strptime(pl.Datetime, "%Y-%m-%d %H:%M:%S%:z"),
+            pl.col("O_TEMP").qcut(20, allow_duplicates=True),
+            pl.col("O_PRCP").qcut(20, allow_duplicates=True),
+            pl.col("O_WSPD").qcut(20, allow_duplicates=True),
+            pl.col("D_TEMP").qcut(20, allow_duplicates=True),
+            pl.col("D_PRCP").qcut(20, allow_duplicates=True),
+            pl.col("D_WSPD").qcut(20, allow_duplicates=True),
+        )
     )
 
     supplemental_data = (
@@ -49,47 +65,64 @@ def prepare_flight_chain_data(
         .with_columns(
             pl.concat_list(
                 # Do we want an airport to have the same embedding as a departure and arrival?
+                pl.lit("<DEPARTURE>"),
+                pl.concat_str(pl.lit("CARRIER="), pl.col("OP_CARRIER")),
                 pl.concat_str(pl.lit("AIRPORT="), pl.col("ORIGIN")),
-                pl.concat_str(pl.lit("AIRPORT="), pl.col("DEST")),
-                pl.concat_str(pl.lit("DEP_TEMP="), pl.col("O_TEMP")).fill_null(
-                    "DEP_TEMP=UNK"
-                ),
-                pl.concat_str(pl.lit("DEP_PRCP="), pl.col("O_PRCP")).fill_null(
-                    "DEP_PRCP=UNK"
-                ),
-                pl.concat_str(pl.lit("DEP_WSPD="), pl.col("O_WSPD")).fill_null(
-                    "DEP_WSPD=UNK"
-                ),
-                pl.concat_str(pl.lit("ARR_TEMP="), pl.col("D_TEMP")).fill_null(
-                    "ARR_TEMP=UNK"
-                ),
-                pl.concat_str(pl.lit("ARR_PRCP="), pl.col("D_PRCP")).fill_null(
-                    "ARR_PRCP=UNK"
-                ),
-                pl.concat_str(pl.lit("ARR_WSPD="), pl.col("D_WSPD")).fill_null(
-                    "ARR_WSPD=UNK"
-                ),
+                # pl.concat_str(pl.lit("DEP_TEMP="), pl.col("O_TEMP")).fill_null(
+                #     "DEP_TEMP=UNK"
+                # ),
+                # pl.concat_str(pl.lit("DEP_PRCP="), pl.col("O_PRCP")).fill_null(
+                #     "DEP_PRCP=UNK"
+                # ),
+                # pl.concat_str(pl.lit("DEP_WSPD="), pl.col("O_WSPD")).fill_null(
+                #     "DEP_WSPD=UNK"
+                # ),
+                # pl.concat_str(pl.lit("ARR_TEMP="), pl.col("D_TEMP")).fill_null(
+                #     "ARR_TEMP=UNK"
+                # ),
+                # pl.concat_str(pl.lit("ARR_PRCP="), pl.col("D_PRCP")).fill_null(
+                #     "ARR_PRCP=UNK"
+                # ),
+                # pl.concat_str(pl.lit("ARR_WSPD="), pl.col("D_WSPD")).fill_null(
+                #     "ARR_WSPD=UNK"
+                # ),
                 pl.concat_str(
-                    pl.lit("DEP_TIME="),
-                    ((pl.col("DEP_TIME") - pl.col("FL_DATE")).dt.total_minutes() / 10)
+                    pl.lit("TIME="),
+                    (
+                        (
+                            pl.col("DEP_TIME") - pl.col("DEP_TIME").dt.truncate("1d")
+                        ).dt.total_minutes()
+                        / 10
+                    )
                     .cast(pl.Int32)
                     .alias("departure_time"),
                 ),
                 pl.concat_str(
-                    pl.lit("DEP_DELAY="),
-                    pl.col("DEP_DELAY").sign()
-                    * pl.col("DEP_DELAY").abs().sqrt().ceil(),
+                    pl.lit("DELAY="),
+                    (
+                        pl.col("DEP_DELAY").sign()
+                        * pl.col("DEP_DELAY").abs().sqrt().ceil()
+                    ).cast(pl.Int32),
                 ),
+                pl.lit("<ARRIVAL>"),
+                pl.concat_str(pl.lit("AIRPORT="), pl.col("DEST")),
                 pl.concat_str(
-                    pl.lit("ARR_TIME="),
-                    ((pl.col("ARR_TIME") - pl.col("FL_DATE")).dt.total_minutes() / 10)
+                    pl.lit("TIME="),
+                    (
+                        (
+                            pl.col("ARR_TIME") - pl.col("ARR_TIME").dt.truncate("1d")
+                        ).dt.total_minutes()
+                        / 10
+                    )
                     .cast(pl.Int32)
                     .alias("arrival_time"),
                 ),
                 pl.concat_str(
-                    pl.lit("ARR_DELAY="),
-                    pl.col("ARR_DELAY").sign()
-                    * pl.col("ARR_DELAY").abs().sqrt().ceil(),
+                    pl.lit("DELAY="),
+                    (
+                        pl.col("ARR_DELAY").sign()
+                        * pl.col("ARR_DELAY").abs().sqrt().ceil()
+                    ).cast(pl.Int32),
                 ),
             ).alias("flight_info")
         )
@@ -118,5 +151,6 @@ if __name__ == "__main__":
             "./data/Flight_Tab/flight_with_weather_2024.csv",
         ],
         supplemental_data="./data/supplemental.parquet",
+        timezone_data="./data/airport_timezones.csv",
         output_path="./data/prepared_data.parquet",
     )
